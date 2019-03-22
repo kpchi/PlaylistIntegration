@@ -1,6 +1,6 @@
 # PlaylistIntegration
 
-This python script allows you to combine multiple Spotify playlists, sorting the tracks by their date added in each playlist.  The end goal is to create one single chronological playlist of all your songs.
+This python script takes all the tracks across the playlists you select, sorts them by date added, and adds them in sorted order to a single playlist.  The end goal is to create one single chronological playlist of all your songs.
 
 I have listed the permissions requested, and what they are required for:
 ```
@@ -10,7 +10,15 @@ playlist-read-private: Read access to your private playlists.
 user-library-read: Read access to 'Songs' under 'Your Library'
 ```
 
-Please ensure you have filled out the following in the credentials.txt.  These are used to authenticate your account with Spotify.  
+## Getting Started
+
+* Install [Python3](https://www.python.org/downloads/)
+* Install the [Spotipy package](https://spotipy.readthedocs.io/en/latest/#installation) using:
+```
+pip install spotipy  OR
+easy_install spotipy
+```
+* Please ensure you have filled out the following in the credentials.txt.  These are used to authenticate your account with Spotify.  
 
 ```
 username=<Your Spotify numeric username>
