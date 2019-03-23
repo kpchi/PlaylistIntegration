@@ -27,3 +27,8 @@ client_secret=<Your client secret>
 redirect_uri=<Your redirect uri>
 ```
 Your Spotify numeric username can be found using the Share your profile link, and it should be after "http://open.spotify.com/user/".  The other 3 fields can be found [here](https://developer.spotify.com/dashboard/applications/).
+
+## Running the script
+```
+python main.py
+```

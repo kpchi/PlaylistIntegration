@@ -21,10 +21,10 @@ def main():
 		target_playlists = get_target_playlists(all_playlists)
 
 		# Get user input for playlist to add sorted songs to, create new playlist if one doesn't exist
-		final_playlist = get_final_playlist(all_playlists)
-
-		# Check if user wants saved songs added in as well
-		# Check if user wants duplicate detection enabled
+		final_playlist = get_final_playlist(spotipy_token, username, all_playlists)
+		
+		# Check if user wants saved songs added in and duplicate detection enabled
+		
 		# Begin process of consolidating songs in selected playlists to track_list
 		# Add saved songs to consolidated track_list
 		# If duplicate detection is enabled, remove duplicated tracks from track_list
@@ -77,20 +77,21 @@ def get_user_playlists(sp, username):
 def get_target_playlists(all_playlists):
 	reselect_playlists = True
 	while reselect_playlists:
-		counter = 0
-
-		for playlist in all_playlists:
-			print(counter, "-", playlist['name'])
-			counter += 1
+		print_playlists(all_playlists)
 
 		print("\nTo select a playlist, please enter the playlist number(s) separated by commas:")
+		
 		while True:
 			targeted_playlists = input()
 			if (re.match(r"[0-9,]+$", targeted_playlists)):
-				targeted_playlists = list(filter(None, targeted_playlists.split(',')))		
-				break
+				targeted_playlists = list(filter(None, targeted_playlists.split(',')))
+
+				if all(int(item) <= (len(all_playlists) - 1) for item in targeted_playlists):
+					break
+				else:
+					print("Please enter a valid number within the range of playlists")
 			else:
-				print('Please enter only numeric digits and the comma (,) character')
+				print('Please enter only numeric digits and the comma (,) character:')
 
 		final_playlists =[]
 
@@ -105,17 +106,58 @@ def get_target_playlists(all_playlists):
 				break
 			elif confirmation == 'n':
 				reselect_playlists = False
+
 				break
 			else:
 				confirmation = input("\nPlease enter only y or n").lower()
 
 	return final_playlists
 
+# Prints out a numeric list of playlists
+# :param playlists: List of playlist objects to be printed out
+def print_playlists(playlists):
+	for id, playlist in enumerate(playlists):
+		print("{} - {}".format(id, playlist['name']))
 
-# Returns list of targeted user playlists IDs
+# Returns ID of targeted final playlist
+# :param sp: Spotipy object
+# :param username: Spotify username
 # :param all_playlists: List of all playlists owned by the user
-def get_final_playlist(all_playlists):
+def get_final_playlist(sp, username, all_playlists):
+	print_playlists(all_playlists)
+
+	targeted_playlist = ""
+
+	print("\nSelect the final playlist to store the sorted songs into, or enter new to create a new playlist:")
+	while True:
+		targeted_playlist = input()
+		if targeted_playlist == "new":
+			targeted_playlist = input("\nPlease enter the name of the new playlist:\n")
+			targeted_playlist = create_final_playlist(sp, username, targeted_playlist)
+
+			break
+		elif (len(targeted_playlist) <= 2 and targeted_playlist.isdigit()):
+			if int(targeted_playlist) > (len(all_playlists) - 1):
+				print("Please enter a valid number within the range of playlists")
+
+				continue
+			else:
+				targeted_playlist = all_playlists[int(targeted_playlist)].get('id')
+
+			break
+		else:
+			print('Please enter only numeric digits and the comma (,) character, or new only:')
+
+	return targeted_playlist
+
+# Returns ID of created final playlist
+# :param sp: Spotipy object
+# :param username: Spotify username
+def create_final_playlist(sp, username, playlist_name):
+	playlist_description = "Chronological list of sorted playlists created on " + str(datetime.now().strftime("%d/%m/%Y at %H:%M:%S"))
+	final_playlist = sp.user_playlist_create(username, playlist_name, public=False, description=playlist_description)
 	
+	return final_playlist.get('id')
 
 
 if __name__== "__main__":
