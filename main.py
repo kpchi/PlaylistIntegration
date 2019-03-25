@@ -1,3 +1,4 @@
+"""Script for chronologically sorting Spotify playlists"""
 from datetime import datetime
 
 import re
@@ -6,6 +7,8 @@ import spotipy.util as util
 
 
 def main():
+    """Main function, runs all the code."""
+
     # Scope / privileges and token authentication credentials
     scope = ('playlist-read-private '
              'playlist-modify-private '
@@ -42,26 +45,42 @@ def main():
         print("Unable to create Spotipy token")
 
 
-# Reads user's credentials for Spotipy token
 def read_credentials():
+    """Reads user's credentials for Spotipy token from credentials.txt.
+
+    Parameters:
+        None
+
+    Returns:
+        Strings of username, client_id, client_secret, redirect_uri.
+    """
+
     username = ''
     client_id = ''
     client_secret = ''
     redirect_uri = ''
 
-    with open('.\\credentials.txt') as fp:
-        username = fp.readline().rstrip().split('=')[1]
-        client_id = fp.readline().rstrip().split('=')[1]
-        client_secret = fp.readline().rstrip().split('=')[1]
-        redirect_uri = fp.readline().rstrip().split('=')[1]
+    with open('.\\credentials.txt') as file_pointer:
+        username = file_pointer.readline().rstrip().split('=')[1]
+        client_id = file_pointer.readline().rstrip().split('=')[1]
+        client_secret = file_pointer.readline().rstrip().split('=')[1]
+        redirect_uri = file_pointer.readline().rstrip().split('=')[1]
 
     return username, client_id, client_secret, redirect_uri
 
 
-# Returns list of all playlists owned by the user
-# :param spotipy_token: Spotipy object
-# :param username: Spotify username
 def get_user_playlists(spotipy_token, username):
+    """Gets and returns all Spotify playlists owned by the username specified.
+
+    Parameters:
+        spotipy_token: Spotipy object
+        username: Spotify username
+
+    Returns:
+        List of dictionaries, each dictionary a Spotify playlist object.
+
+    """
+
     # Grab all user playlists, including private ones
     initial_playlists = spotipy_token.user_playlists(username)
 
@@ -80,9 +99,18 @@ def get_user_playlists(spotipy_token, username):
     return final_playlists
 
 
-# Returns list of targeted user playlists IDs
-# :param all_playlists: List of all playlists owned by the user
 def get_target_playlists(all_playlists):
+    """Takes in user input to select playlists to consolidate.
+
+    Users can choose to reselect playlists if they have forgotten to add playlists.
+
+    Parameters:
+        all_playlists: List of all playlists owned by the user
+
+    Returns:
+        List of user playlist IDs.
+    """
+
     while True:
         print_playlists(all_playlists)
 
@@ -116,16 +144,29 @@ def get_target_playlists(all_playlists):
     return final_playlists
 
 
-# Prints out a numeric list of playlists
-# :param playlists: List of playlist objects to be printed out
 def print_playlists(playlists):
+    """Prints out an itemized list of playlists
+
+    Users can choose to reselect playlists if they have forgotten to add playlists.
+
+    Parameters:
+        playlists: List of playlist objects to be printed out.
+    """
+
     for playlist_id, playlist in enumerate(playlists):
         print("{} - {}".format(playlist_id, playlist['name']))
 
 
-# Returns True/False based on yes/no input
-# :param question: Question to display
 def confirm_yesno(question):
+    """Gets user's reply to yes/no confirmation.
+
+    Parameters:
+        question: String containing question to be displayed
+
+    Returns:
+        Boolean representation of user's reply to question.
+    """
+
     confirmation = input("\n" + question + " y/n\n").lower()
     while True:
         if confirmation == 'y':
@@ -140,11 +181,19 @@ def confirm_yesno(question):
     return confirmation
 
 
-# Returns ID of targeted final playlist
-# :param spotipy_token: Spotipy object
-# :param username: Spotify username
-# :param all_playlists: List of all playlists owned by the user
 def get_final_playlist(spotipy_token, username, all_playlists):
+    """Gets and returns the final Spotify playlist ID.
+
+    Parameters:
+        spotipy_token: Spotipy object
+        username: Spotify username
+        all_playlists: List of all playlists owned by the user
+
+    Returns:
+        String of final playlist ID.
+
+    """
+
     print_playlists(all_playlists)
 
     targeted_playlist = ""
@@ -181,10 +230,18 @@ def get_final_playlist(spotipy_token, username, all_playlists):
     return targeted_playlist
 
 
-# Returns ID of created final playlist
-# :param spotipy_token: Spotipy object
-# :param username: Spotify username
 def create_final_playlist(spotipy_token, username, playlist_name):
+    """Creates and returns ID of new final playlist.
+
+    Parameters:
+        spotipy_token: Spotipy object
+        username: Spotify username
+        playlist_name: String containing playlist name to be created
+
+    Returns:
+        String ID of final playlist created.
+    """
+
     playlist_description = "Chronological list of sorted playlists created on "
     playlist_description += str(datetime.now().strftime("%d/%m/%Y at %H:%M:%S"))
     final_playlist = spotipy_token.user_playlist_create(username, playlist_name, public=False,
@@ -193,43 +250,73 @@ def create_final_playlist(spotipy_token, username, playlist_name):
     return final_playlist.get('id')
 
 
-# Returns user preference for adding saved songs and duplicate detection
 def get_user_preferences():
-    pref_saved_songs = bool(confirm_yesno("Do you want to add your saved 'Songs' in 'Your Library'?"))
-    pref_dup_detect = bool(confirm_yesno("Do you want to remove duplicates from the final sorted playlist?"))
+    """Reads user's credentials for Spotipy token from credentials.txt.
+
+    Parameters:
+        None
+
+    Returns:
+        Boolean representation of user's reply to adding saved songs and
+        enabling duplicate detection.
+    """
+
+    pref_saved_songs = bool(confirm_yesno(
+        "Do you want to add your saved 'Songs' in 'Your Library'?"))
+    pref_dup_detect = bool(confirm_yesno(
+        "Do you want to remove duplicates from the final sorted playlist?"))
 
     return pref_saved_songs, pref_dup_detect
 
 
 # Returns a consolidated list of track IDs
-# :param spotipy_token: Spotipy object
-# :param username: Spotify username
-# :param playlist_ids: List of playlist IDs
-# :param var_saved_songs: Add in saved songs?
-# :param var_dup_detect: Remove duplicates?
+
 def get_sorted_tracks(spotipy_token, username, playlist_ids, var_saved_songs, var_dup_detect):
+    """Gets and returns a list of consolidated track IDs.
+
+    This function gets all tracks from the specified playlists, before checking to
+    add the user's saved songs and doing duplicate detection.  Finally, it sorts the
+    resulting list before returning it.
+
+    Parameters:
+        spotipy_token: Spotipy object
+        username: Spotify username
+        playlist_ids: List of playlist IDs
+        var_saved_songs: Add in saved songs?
+        var_dup_detect: Remove duplicates?
+
+    Returns:
+        List of consolidated track IDs.
+    """
+
     final_tracks = []
-    # First get tracks from each individual playlist
+
     for playlistid in playlist_ids:
         final_tracks.extend(get_tracks_from_playlist(spotipy_token, username, playlistid))
     #print("No. of tracks", len(final_tracks))
-    # Then add saved songs if required
+
     if var_saved_songs:
         final_tracks.extend(get_saved_songs(spotipy_token))
         #print("No. of tracks w/ saved songs", len(final_tracks))
 
-    # Then do duplicate detection
     #if var_dup_detect:
     #
 
     # Then sort the remaining tracks
 
 
-# Returns a list of tracks from a specified playlist
-# :param spotipy_token: Spotipy object
-# :param username: Spotify username
-# :param playlist_ids: List of playlist IDs
 def get_tracks_from_playlist(spotipy_token, username, playlist_ids):
+    """Gets and returns tracks from a given list of playlists.
+
+    Parameters:
+        spotipy_token: Spotipy object
+        username: Spotify username
+        playlist_ids: List of playlist IDs
+
+    Returns:
+        List of all Spotipy track objects from a given set of playlist IDs.
+    """
+
     # Grabs all songs from specified playlist, limit of 50 per round
     results = spotipy_token.user_playlist(username, playlist_ids, fields='tracks, next')
     temp_tracks = results['tracks']
@@ -245,20 +332,34 @@ def get_tracks_from_playlist(spotipy_token, username, playlist_ids):
     return final_tracks
 
 
-# Helper function that returns a list of tracks from a playlist object
-# :param results: Spotipy playlist object containing tracks
 def get_tracks_from_playlist_helper(results):
+    """Helper function that returns a list of tracks from a playlist object.
+
+    Parameters:
+        results: Spotipy playlist object
+
+    Returns:
+        List of the last 50 tracks within a playlist.
+    """
+
     track_results = []
 
-    for i, track in enumerate(results['items']):
+    for track in results['items']:
         track_results.append(track)
 
     return track_results
 
 
-# Returns user's saved songs
-# :param spotipy_token: Spotipy object
 def get_saved_songs(spotipy_token):
+    """Gets all of the user's saved songs.
+
+    Parameters:
+        spotipy_token: Spotipy object
+
+    Returns:
+        List of all of the user's saved songs.
+    """
+
     # Grabs all of users saved tracks, limit of 50 per round
     results = spotipy_token.current_user_saved_tracks()
     saved_songs = []
