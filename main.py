@@ -1,7 +1,9 @@
 """Script for chronologically sorting Spotify playlists"""
 from datetime import datetime
 
+import os
 import re
+import keyring
 import spotipy
 import spotipy.util as util
 
@@ -14,28 +16,27 @@ def main():
              'playlist-modify-private '
              'playlist-read-collaborative '
              'user-library-read')
-    username, client_id, client_secret, redirect_uri = read_credentials()
 
-    token = util.prompt_for_user_token(username, scope, client_id, client_secret, redirect_uri)
+    username, token = get_spotipy_token(scope)
 
     if token:
-        spotipy_token = spotipy.Spotify(auth=token)
+        spotipy_object = spotipy.Spotify(auth=token)
+
+        # Check if user wants saved songs added in and duplicate detection enabled
+        var_saved_songs, var_dup_detect = get_user_preferences()
 
         # Gets all the playlists the user owns
-        all_playlists = get_user_playlists(spotipy_token, username)
+        all_playlists = get_user_playlists(spotipy_object, username)
 
         # Gets the targeted playlists to sort
         target_playlists = get_target_playlists(all_playlists)
 
         # Gets playlist to add sorted songs to, creates new playlist if one doesn't exist
-        final_playlist = get_final_playlist(spotipy_token, username, all_playlists)
-
-        # Check if user wants saved songs added in and duplicate detection enabled
-        var_saved_songs, var_dup_detect = get_user_preferences()
+        final_playlist = get_final_playlist(spotipy_object, username, all_playlists)
 
         # Begin process of consolidating songs in selected playlists to track_list
-        get_sorted_tracks(spotipy_token, username,
-                          target_playlists, var_saved_songs, var_dup_detect)
+        get_sorted_tracks(spotipy_object, username, target_playlists,
+                          var_saved_songs, var_dup_detect)
 
         # Add saved songs to consolidated track_list
         # If duplicate detection is enabled, remove duplicated tracks from track_list
@@ -45,28 +46,53 @@ def main():
         print("Unable to create Spotipy token")
 
 
-def read_credentials():
+def get_spotipy_token(scope):
+    """Gets and returns an authenticated Spotipy token from keyring.
+
+    Parameters:
+        scope: String of allowed scopes
+
+    Returns:
+        String username and the authenticated Spotipy token.
+    """
+
+    username = keyring.get_password("playlistintegration", "pi_username")
+    client_id = keyring.get_password("playlistintegration", "client_id")
+    client_secret = keyring.get_password("playlistintegration", "client_secret")
+    redirect_uri = keyring.get_password("playlistintegration", "redirect_uri")
+
+    if (not username) or (not client_id) or (not client_secret) or (not redirect_uri):
+        username = os.getenv("pi_username")
+        client_id = os.getenv("client_id")
+        client_secret = os.getenv("client_secret")
+        redirect_uri = os.getenv("redirect_uri")
+        keyring.set_password("playlistintegration", "pi_username", username)
+        keyring.set_password("playlistintegration", "client_id", client_id)
+        keyring.set_password("playlistintegration", "client_secret", client_secret)
+        keyring.set_password("playlistintegration", "redirect_uri", redirect_uri)
+
+    token = util.prompt_for_user_token(username, scope, client_id, client_secret, redirect_uri)
+
+    return username, token
+
+
+def get_user_preferences():
     """Reads user's credentials for Spotipy token from credentials.txt.
 
     Parameters:
         None
 
     Returns:
-        Strings of username, client_id, client_secret, redirect_uri.
+        Boolean representation of user's reply to adding saved songs and
+        enabling duplicate detection.
     """
 
-    username = ''
-    client_id = ''
-    client_secret = ''
-    redirect_uri = ''
+    pref_saved_songs = bool(confirm_yesno(
+        "Do you want to add your saved 'Songs' in 'Your Library'?"))
+    pref_dup_detect = bool(confirm_yesno(
+        "Do you want to remove duplicates from the final sorted playlist?"))
 
-    with open('.\\credentials.txt') as file_pointer:
-        username = file_pointer.readline().rstrip().split('=')[1]
-        client_id = file_pointer.readline().rstrip().split('=')[1]
-        client_secret = file_pointer.readline().rstrip().split('=')[1]
-        redirect_uri = file_pointer.readline().rstrip().split('=')[1]
-
-    return username, client_id, client_secret, redirect_uri
+    return pref_saved_songs, pref_dup_detect
 
 
 def get_user_playlists(spotipy_token, username):
@@ -129,7 +155,7 @@ def get_target_playlists(all_playlists):
                 if not targeted_playlists:
                     print("Please select a playlist")
                 else:
-                    print('Please enter only numeric digits and the comma (,) character:')
+                    print("Please enter only numeric digits and the comma (,) character:")
 
         final_playlists = []
 
@@ -176,7 +202,7 @@ def confirm_yesno(question):
             confirmation = False
             break
         else:
-            confirmation = input("\nPlease enter only y or n\n").lower()
+            confirmation = input("\nPlease enter only y or n.\n").lower()
 
     return confirmation
 
@@ -196,36 +222,35 @@ def get_final_playlist(spotipy_token, username, all_playlists):
 
     print_playlists(all_playlists)
 
-    targeted_playlist = ""
-
-    print("\nSelect the final playlist to store the sorted songs into",
-          "or enter new to create a new playlist:")
+    print("\nSelect a playlist to store the sorted songs into or",
+          "enter new to create a new playlist:")
     while True:
         targeted_playlist = input()
         if not targeted_playlist.strip():
-            print("Please select a playlist")
+            print("\nPlease select a playlist")
         elif targeted_playlist == "new":
-            print("\nPlease enter the name of the new playlist:")
+            targeted_playlist = input("\nPlease enter the name of the new playlist:\n")
             while True:
-                targeted_playlist = input()
                 if not targeted_playlist.strip():
-                    print("Please enter a playlist name")
+                    targeted_playlist = input("\nPlease enter a playlist name\n")
                     continue
                 else:
                     break
 
             targeted_playlist = create_final_playlist(spotipy_token, username, targeted_playlist)
+
             break
-        elif (len(targeted_playlist) <= 2 and targeted_playlist.isdigit()):
+        elif targeted_playlist.isdigit():
             if int(targeted_playlist) > (len(all_playlists) - 1):
-                print("Please enter a valid number within the range of playlists")
+                print("\nPlease enter a valid number less than "
+                      + str(len(all_playlists) - 1) + ":")
                 continue
             else:
                 targeted_playlist = all_playlists[int(targeted_playlist)].get('id')
 
             break
         else:
-            print('Please enter only numeric digits and the comma (,) character, or new only:')
+            print("\nPlease enter only numeric digits and the comma (,) character, or new only:")
 
     return targeted_playlist
 
@@ -248,25 +273,6 @@ def create_final_playlist(spotipy_token, username, playlist_name):
                                                         description=playlist_description)
 
     return final_playlist.get('id')
-
-
-def get_user_preferences():
-    """Reads user's credentials for Spotipy token from credentials.txt.
-
-    Parameters:
-        None
-
-    Returns:
-        Boolean representation of user's reply to adding saved songs and
-        enabling duplicate detection.
-    """
-
-    pref_saved_songs = bool(confirm_yesno(
-        "Do you want to add your saved 'Songs' in 'Your Library'?"))
-    pref_dup_detect = bool(confirm_yesno(
-        "Do you want to remove duplicates from the final sorted playlist?"))
-
-    return pref_saved_songs, pref_dup_detect
 
 
 # Returns a consolidated list of track IDs
@@ -293,7 +299,7 @@ def get_sorted_tracks(spotipy_token, username, playlist_ids, var_saved_songs, va
 
     for playlistid in playlist_ids:
         final_tracks.extend(get_tracks_from_playlist(spotipy_token, username, playlistid))
-    #print("No. of tracks", len(final_tracks))
+        #print("No. of tracks", len(final_tracks))
 
     if var_saved_songs:
         final_tracks.extend(get_saved_songs(spotipy_token))

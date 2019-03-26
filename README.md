@@ -10,6 +10,7 @@ playlist-read-private: Read access to your private playlists.
 user-library-read: Read access to 'Songs' under 'Your Library'
 ```
 
+
 ## Getting Started
 
 * Install [Python3](https://www.python.org/downloads/)
@@ -18,17 +19,27 @@ user-library-read: Read access to 'Songs' under 'Your Library'
 pip install spotipy  OR
 easy_install spotipy
 ```
-* Please ensure you have filled out the following in the credentials.txt.  These are used to authenticate your account with Spotify.  
-
+* Please ensure you have exported the following environment variables before running the script.  These are used to authenticate your account with Spotify.  
 ```
-username=<Your Spotify numeric username>
-client_id=<Your client ID>
-client_secret=<Your client secret>
-redirect_uri=<Your redirect uri>
+On Windows
+----------
+set pi_username=<Your Spotify numeric username>
+set client_id=<Your client ID>
+set client_secret=<Your client secret>
+set redirect_uri=<Your redirect uri>
+
+On *nix
+----------
+export pi_username=<Your Spotify numeric username>
+export client_id=<Your client ID>
+export client_secret=<Your client secret>
+export redirect_uri=<Your redirect uri>
 ```
 Your Spotify numeric username can be found using the Share your profile link, and it should be after "http://open.spotify.com/user/".  The other 3 fields can be found [here](https://developer.spotify.com/dashboard/applications/).
 
+
 ## Running the script
+Please ensure you have exported the relevant environment variables!
 ```
 python main.py
 ```
