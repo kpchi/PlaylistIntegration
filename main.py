@@ -7,41 +7,44 @@ import keyring
 import spotipy
 import spotipy.util as util
 
+# Chunk size set to 80 to account for Spotify API limit of adding 75 - 100 songs per call.
+SPOTIPY_MAX_TRACKS_PER_ADD = 80
 
 def main():
     """Main function, runs all the code."""
 
     # Scope / privileges and token authentication credentials
-    scope = ('playlist-read-private '
-             'playlist-modify-private '
-             'playlist-read-collaborative '
-             'user-library-read')
+    scope = ("playlist-read-private "
+             "playlist-modify-private "
+             "playlist-read-collaborative "
+             "user-library-read")
 
     username, token = get_spotipy_token(scope)
 
-    if token:
-        spotipy_object = spotipy.Spotify(auth=token)
-
-        # Check if user wants saved songs added in and duplicate detection enabled
-        var_saved_songs, var_dup_detect = get_user_preferences()
-
-        # Gets all the playlists the user owns
-        all_playlists = get_user_playlists(spotipy_object, username)
-
-        # Gets the targeted playlists to sort
-        target_playlists = get_target_playlists(all_playlists)
-
-        # Gets playlist to add sorted songs to, creates new playlist if one doesn't exist
-        final_playlist = get_final_playlist(spotipy_object, username, all_playlists)
-
-        # Begin process of consolidating songs in selected playlists to track_list
-        sorted_tracks = get_sorted_tracks(spotipy_object, username, target_playlists,
-                                          var_saved_songs, var_dup_detect)
-
-        # Add list of sorted track IDs to target final playlist, chunking them into sets of 75
-        add_tracks_to_final_playlist(spotipy_object, username, final_playlist, sorted_tracks)
-    else:
+    if token is None:
         print("Unable to create Spotipy token.")
+        return
+
+    spotipy_object = spotipy.Spotify(auth=token)
+
+    # Check if user wants saved songs added in and duplicate detection enabled
+    add_saved_songs, do_dup_detect = get_user_preferences()
+
+    # Gets all the playlists the user owns
+    all_playlists = get_user_playlists(spotipy_object, username)
+
+    # Gets the targeted playlists to sort
+    target_playlists = get_target_playlists(all_playlists)
+
+    # Gets playlist to add sorted songs to, creates new playlist if one doesn'1t exist
+    final_playlist = get_final_playlist(spotipy_object, username, all_playlists)
+
+    # Begin process of consolidating songs in selected playlists to track_list
+    sorted_tracks = get_sorted_tracks(spotipy_object, username, target_playlists,
+                                      add_saved_songs, do_dup_detect)
+
+    # Add list of sorted track IDs to target final playlist, chunking them into sets of 75
+    add_tracks_to_final_playlist(spotipy_object, username, final_playlist, sorted_tracks)
 
 
 def get_spotipy_token(scope):
@@ -85,19 +88,19 @@ def get_user_preferences():
         enabling duplicate detection.
     """
 
-    pref_saved_songs = bool(confirm_yesno(
+    add_saved_songs = bool(confirm_yesno(
         "Do you want to add your saved 'Songs' in 'Your Library'?"))
-    pref_dup_detect = bool(confirm_yesno(
+    do_dup_detect = bool(confirm_yesno(
         "Do you want to remove duplicates from the final sorted playlist?"))
 
-    return pref_saved_songs, pref_dup_detect
+    return add_saved_songs, do_dup_detect
 
 
-def get_user_playlists(spotipy_token, username):
+def get_user_playlists(spotipy_obj, username):
     """Gets and returns all Spotify playlists owned by the username specified.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
 
     Returns:
@@ -106,17 +109,17 @@ def get_user_playlists(spotipy_token, username):
     """
 
     # Grab all user playlists, including private ones
-    initial_playlists = spotipy_token.user_playlists(username)
+    initial_playlists = spotipy_obj.user_playlists(username)
 
     final_playlists = []
 
     while initial_playlists:
-        for playlist in initial_playlists['items']:
-            if playlist['owner']['id'] == username:
+        for playlist in initial_playlists["items"]:
+            if playlist["owner"]["id"] == username:
                 final_playlists.append(playlist)
 
-        if initial_playlists['next']:
-            initial_playlists = spotipy_token.next(initial_playlists)
+        if initial_playlists["next"]:
+            initial_playlists = spotipy_obj.next(initial_playlists)
         else:
             initial_playlists = None
 
@@ -135,6 +138,8 @@ def get_target_playlists(all_playlists):
         List of user playlist IDs.
     """
 
+    final_playlists = []
+
     while True:
         print_playlists(all_playlists)
 
@@ -143,7 +148,8 @@ def get_target_playlists(all_playlists):
         while True:
             targeted_playlists = input()
             if re.match(r"[0-9,]+$", targeted_playlists):
-                targeted_playlists = list(filter(None, targeted_playlists.split(',')))
+                # Splits and filters out the empty case when an input ends with a ,
+                targeted_playlists = list(filter(None, targeted_playlists.split(",")))
 
                 if all(int(item) <= (len(all_playlists) - 1) for item in targeted_playlists):
                     break
@@ -155,15 +161,15 @@ def get_target_playlists(all_playlists):
                 else:
                     print("Please enter only numeric digits and the comma (,) character:")
 
-        final_playlists = []
-
         print("\nYou have selected the following playlists:")
         for playlist_id in targeted_playlists:
-            print(playlist_id, "-", all_playlists[int(playlist_id)].get('name'))
-            final_playlists.append(all_playlists[int(playlist_id)].get('id'))
+            print(playlist_id, "-", all_playlists[int(playlist_id)].get("name"))
+            final_playlists.append(all_playlists[int(playlist_id)].get("id"))
 
         if not confirm_yesno("Do you want to choose the playlists again?"):
             break
+
+        final_playlists = []
 
     return final_playlists
 
@@ -177,8 +183,9 @@ def print_playlists(playlists):
         playlists: List of playlist objects to be printed out.
     """
 
+    print("")
     for playlist_id, playlist in enumerate(playlists):
-        print("{} - {}".format(playlist_id, playlist['name']))
+        print("{} - {}".format(playlist_id, playlist["name"]))
 
 
 def confirm_yesno(question):
@@ -191,25 +198,27 @@ def confirm_yesno(question):
         Boolean representation of user's reply to question.
     """
 
-    confirmation = input("\n" + question + " y/n\n").lower()
+    result = False
+    response = input("\n" + question + " y/n\n").lower()
+
     while True:
-        if confirmation == 'y':
-            confirmation = True
+        if response == "y":
+            result = True
             break
-        elif confirmation == 'n':
-            confirmation = False
+        elif response == "n":
+            result = False
             break
         else:
-            confirmation = input("\nPlease enter only y or n.\n").lower()
+            response = input("\nPlease enter only y or n.\n").lower()
 
-    return confirmation
+    return result
 
 
-def get_final_playlist(spotipy_token, username, all_playlists):
+def get_final_playlist(spotipy_obj, username, all_playlists):
     """Gets and returns the final Spotify playlist ID.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
         all_playlists: List of all playlists owned by the user
 
@@ -235,16 +244,16 @@ def get_final_playlist(spotipy_token, username, all_playlists):
                 else:
                     break
 
-            targeted_playlist = create_final_playlist(spotipy_token, username, targeted_playlist)
+            targeted_playlist = create_final_playlist(spotipy_obj, username, targeted_playlist)
 
             break
         elif targeted_playlist.isdigit():
             if int(targeted_playlist) > (len(all_playlists) - 1):
-                print("\nPlease enter a valid number less than "
+                print("\nPlease enter a valid number less than  "
                       + str(len(all_playlists) - 1) + ":")
                 continue
             else:
-                targeted_playlist = all_playlists[int(targeted_playlist)].get('id')
+                targeted_playlist = all_playlists[int(targeted_playlist)].get("id")
 
             break
         else:
@@ -253,11 +262,11 @@ def get_final_playlist(spotipy_token, username, all_playlists):
     return targeted_playlist
 
 
-def create_final_playlist(spotipy_token, username, playlist_name):
+def create_final_playlist(spotipy_obj, username, playlist_name):
     """Creates and returns ID of new final playlist.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
         playlist_name: String containing playlist name to be created
 
@@ -267,13 +276,13 @@ def create_final_playlist(spotipy_token, username, playlist_name):
 
     playlist_description = "Chronological list of sorted playlists created on "
     playlist_description += str(datetime.now().strftime("%d/%m/%Y at %H:%M:%S"))
-    final_playlist = spotipy_token.user_playlist_create(username, playlist_name, public=False,
-                                                        description=playlist_description)
+    final_playlist = spotipy_obj.user_playlist_create(username, playlist_name, public=False,
+                                                      description=playlist_description)
 
-    return final_playlist.get('id')
+    return final_playlist.get("id")
 
 
-def get_sorted_tracks(spotipy_token, username, playlist_ids, var_saved_songs, var_dup_detect):
+def get_sorted_tracks(spotipy_obj, username, playlist_ids, add_saved_songs, do_dup_detect):
     """Gets and returns a list of consolidated track IDs.
 
     This function gets all tracks from the specified playlists, before checking to
@@ -281,11 +290,11 @@ def get_sorted_tracks(spotipy_token, username, playlist_ids, var_saved_songs, va
     duplicate detection.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
         playlist_ids: List of playlist IDs
-        var_saved_songs: Add in saved songs?
-        var_dup_detect: Remove duplicates?
+        add_saved_songs: Add in saved songs?
+        do_dup_detect: Remove duplicates?
 
     Returns:
         List of consolidated track IDs.
@@ -294,28 +303,28 @@ def get_sorted_tracks(spotipy_token, username, playlist_ids, var_saved_songs, va
     final_tracks = []
 
     for playlistid in playlist_ids:
-        final_tracks.extend(get_tracks_from_playlist(spotipy_token, username, playlistid))
+        final_tracks.extend(get_tracks_from_playlist(spotipy_obj, username, playlistid))
         #print("No. of tracks", len(final_tracks))
 
-    if var_saved_songs:
-        final_tracks.extend(get_saved_songs(spotipy_token))
+    if add_saved_songs:
+        final_tracks.extend(get_saved_songs(spotipy_obj))
         #print("No. of tracks w/ saved songs", len(final_tracks))
 
     # First sort all the tracks
-    sorted_final_tracks = sorted(final_tracks, key=lambda k: datetime.fromisoformat(
-        str(k['added_at']).replace('Z', '')))
+    sorted_tracks = sorted(final_tracks,
+                           key=lambda k: datetime.strptime(k["added_at"], "%Y-%m-%dT%H:%M:%SZ"))
 
-    if var_dup_detect:
-        sorted_final_tracks = remove_duplicate_tracks(sorted_final_tracks)
+    if do_dup_detect:
+        sorted_tracks = remove_duplicate_tracks(sorted_tracks)
 
-    return sorted_final_tracks
+    return sorted_tracks
 
 
-def get_tracks_from_playlist(spotipy_token, username, playlist_ids):
+def get_tracks_from_playlist(spotipy_obj, username, playlist_ids):
     """Gets and returns tracks from a given list of playlists.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
         playlist_ids: List of playlist IDs
 
@@ -323,59 +332,37 @@ def get_tracks_from_playlist(spotipy_token, username, playlist_ids):
         List of all Spotipy track objects from a given set of playlist IDs.
     """
 
-    # Grabs all songs from specified playlist, limit of 50 per round
-    results = spotipy_token.user_playlist(username, playlist_ids, fields='tracks, next')
-    temp_tracks = results['tracks']
+    results = spotipy_obj.user_playlist(username, playlist_ids, fields="tracks, next")
+    temp_tracks = results["tracks"]
 
-    final_tracks = get_tracks_from_playlist_helper(temp_tracks)
+    final_tracks = temp_tracks["items"]
 
-    # If limit of 50 is hit, loop to next 50 tracks
-    while temp_tracks['next']:
-        temp_tracks = spotipy_token.next(temp_tracks)
+    while temp_tracks["next"]:
+        temp_tracks = spotipy_obj.next(temp_tracks)
 
-        final_tracks.extend(get_tracks_from_playlist_helper(temp_tracks))
+        final_tracks.extend(temp_tracks["items"])
 
     return final_tracks
 
 
-def get_tracks_from_playlist_helper(results):
-    """Helper function that returns a list of tracks from a playlist object.
-
-    Parameters:
-        results: Spotipy playlist object
-
-    Returns:
-        List of the last 50 tracks within a playlist.
-    """
-
-    track_results = []
-
-    for track in results['items']:
-        track_results.append(track)
-
-    return track_results
-
-
-def get_saved_songs(spotipy_token):
+def get_saved_songs(spotipy_obj):
     """Gets all of the user's saved songs.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
 
     Returns:
         List of all of the user's saved songs.
     """
 
-    # Grabs all of users saved tracks, limit of 50 per round
-    results = spotipy_token.current_user_saved_tracks()
+    results = spotipy_obj.current_user_saved_tracks()
     saved_songs = []
 
     while results:
-        for item in results['items']:
+        for item in results["items"]:
             saved_songs.append(item)
-        # If limit of 50 is hit, loop to next 50 saved songs
-        if results['next']:
-            results = spotipy_token.next(results)
+        if results["next"]:
+            results = spotipy_obj.next(results)
         else:
             results = None
 
@@ -397,21 +384,19 @@ def remove_duplicate_tracks(target_list):
     """
 
     unique_strs = set()
-    unique_trackids = set()
     unique = []
+
     for track in target_list:
-        tracking_string = str(track.get('track').get('artists')[0].get('name')
-                              + "_" + track.get('track').get('name'))
-        if ((tracking_string not in unique_strs) and
-                (track.get("track").get("id") not in unique_trackids)):
+        tracking_string = str(track.get("track").get("artists")[0].get("name")
+                              + "_" + track.get("track").get("name"))
+        if tracking_string not in unique_strs:
             unique.append(track)
             unique_strs.add(tracking_string)
-            unique_trackids.add(track.get("track").get("id"))
 
     return unique
 
 
-def add_tracks_to_final_playlist(spotipy_token, username, final_playlist, sorted_tracks):
+def add_tracks_to_final_playlist(spotipy_obj, username, final_playlist, sorted_tracks):
     """Adds sorted tracks to final playlist given.
 
     This is done in 3 phases.  Firstly, the sorted_tracks are converted into a list of
@@ -420,36 +405,31 @@ def add_tracks_to_final_playlist(spotipy_token, username, final_playlist, sorted
     added into the target playlist.
 
     Parameters:
-        spotipy_token: Spotipy object
+        spotipy_obj: Spotipy object
         username: Spotify username
         final_playlist: Final Playlist ID
         sorted_tracks: List of sorted track objects.
     """
 
-    sorted_trackids = []
-    for item in sorted_tracks:
-        sorted_trackids.append(item.get("track").get("id"))
+    sorted_trackids = [item.get("track").get("id") for item in sorted_tracks]
 
-    chunked_list = list(chunks(sorted_trackids, 75))
+    chunked_list = list(chunks(sorted_trackids, SPOTIPY_MAX_TRACKS_PER_ADD))
 
     for sub_list in chunked_list:
-        results = spotipy_token.user_playlist_add_tracks(username, final_playlist,
-                                                         sub_list)
+        results = spotipy_obj.user_playlist_add_tracks(username, final_playlist,
+                                                       sub_list)
         print(results)
 
 
-# Yields a list of specified chunk size
-# :param list_to_chunk: List to be chunked
-# :param list_size: Sublist chunk size
 def chunks(list_to_chunk, list_size):
-    """Yields chunked sublists of the given list in the specified chunk size.
+    """Yields slices of the given list in the specified chunk size.
 
     Parameters:
         list_to_chunk: List to be chunked.
-        list_size: Sublist chunk size.
+        list_size: Slice chunk size.
 
     Returns:
-        Yields sublist of specified chunk size
+        Yields slices of specified chunk size.
     """
     # For item i in a range that is a length of list size.
     for i in range(0, len(list_to_chunk), list_size):
