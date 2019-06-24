@@ -16,6 +16,7 @@ def main():
     # Scope / privileges and token authentication credentials
     scope = ("playlist-read-private "
              "playlist-modify-private "
+             "playlist-modify-public "
              "playlist-read-collaborative "
              "user-library-read")
 

@@ -5,6 +5,7 @@ This python script takes all the tracks across the playlists you select, sorts t
 I have listed the permissions requested, and what they are required for:
 ```
 playlist-modify-private: Creating or modifying a private playlist.
+playlist-modify-public: Creating or modifying a public playlist.
 playlist-read-collaborative: Reading collaborative playlists.
 playlist-read-private: Read access to your private playlists. 
 user-library-read: Read access to 'Songs' under 'Your Library'
